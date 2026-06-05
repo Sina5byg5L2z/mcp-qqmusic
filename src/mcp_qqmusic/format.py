@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import Any
 
 
@@ -460,7 +461,11 @@ def fmt_mv_detail(detail: Any, urls: Any = None) -> str:
     if playcnt:
         lines.append(f"播放量: {playcnt}")
     if pubdate:
-        lines.append(f"发布: {pubdate}")
+        try:
+            pub_str = datetime.fromtimestamp(pubdate).strftime("%Y-%m-%d")
+        except (ValueError, OSError, TypeError):
+            pub_str = str(pubdate)
+        lines.append(f"发布: {pub_str}")
     if desc:
         lines.append(f"简介: {desc[:300]}")
 
