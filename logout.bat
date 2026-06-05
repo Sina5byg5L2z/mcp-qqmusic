@@ -1,9 +1,4 @@
 @echo off
 cd /d "%~dp0"
-if exist credential.json (
-    del credential.json
-    echo 已清除登录凭证。
-) else (
-    echo 当前未登录，无需登出。
-)
+uv run python -c "import os; f='credential.json'; os.remove(f) if os.path.exists(f) else None; print('Done.')"
 pause
