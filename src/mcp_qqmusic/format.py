@@ -263,7 +263,7 @@ def fmt_singer_info(info: Any, desc: Any = None, songs: list[Any] | None = None,
         if extras:
             lines += extras
     if wiki:
-        lines += ["", "--- 简介 ---", wiki[:3000]]
+        lines += ["", "--- 简介 ---", wiki]
     if songs:
         lines += ["", "--- 热门歌曲 ---", fmt_songs(songs)]
     if albums:
