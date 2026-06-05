@@ -16,13 +16,17 @@ from qqmusic_api.modules.song import SongFileInfo, SongFileType
 
 from .format import (
     fmt_album_detail,
+    fmt_albums,
     fmt_lyric,
     fmt_mv_detail,
+    fmt_mv_list,
     fmt_recommend,
     fmt_singer_info,
+    fmt_singers,
     fmt_song_detail,
     fmt_song_urls,
     fmt_songlist_detail,
+    fmt_songlists,
     fmt_songs,
     fmt_top_detail,
 )
@@ -127,7 +131,16 @@ async def search(
         items = getattr(data, type, None) or getattr(data, "song", None) or []
         total = getattr(data, "total_num", 0) or getattr(data, "estimate_sum", 0)
         has_more = getattr(data, "nextpage", 0) and data.nextpage > 0
-        result = fmt_songs(items)
+        if type == "singer":
+            result = fmt_singers(items)
+        elif type == "album":
+            result = fmt_albums(items)
+        elif type == "songlist":
+            result = fmt_songlists(items)
+        elif type == "mv":
+            result = fmt_mv_list(items)
+        else:
+            result = fmt_songs(items)
         meta = f"共 {total} 条结果{' (还有更多)' if has_more else ''}"
         return f"{meta}\n{result}"
     except Exception as e:
@@ -167,6 +180,9 @@ async def detail(
                 info = await client.singer.get_info(id)
             except Exception:
                 info = None
+            # 如果 get_info 失败且 id 是数字，提示用 MID
+            if not info and id.isdigit():
+                return f"歌手API需要MID而非数字ID。请先用 search(type='singer') 搜索，从结果中获取MID再查询。"
             try:
                 desc = await client.singer.get_desc([id])
             except Exception:

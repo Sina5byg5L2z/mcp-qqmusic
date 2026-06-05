@@ -78,6 +78,79 @@ def fmt_songs(songs: list[Any]) -> str:
     return "\n".join(_song_line(s, i + 1) for i, s in enumerate(songs))
 
 
+def fmt_singers(singers: list[Any]) -> str:
+    """歌手搜索结果格式化."""
+    if not singers:
+        return "无结果"
+    lines = []
+    for i, s in enumerate(singers):
+        name = getattr(s, "name", None) or getattr(s, "title", "未知")
+        mid = getattr(s, "mid", None) or ""
+        lines.append(f"{i+1}. {name} | MID:{mid}")
+    return "\n".join(lines)
+
+
+def fmt_albums(albums: list[Any]) -> str:
+    """专辑搜索结果格式化."""
+    if not albums:
+        return "无结果"
+    lines = []
+    for i, a in enumerate(albums):
+        name = _strip_html(getattr(a, "name", None) or getattr(a, "title", None)) or "未知"
+        mid = getattr(a, "mid", None) or ""
+        singer = getattr(a, "singer", None)
+        singer_str = singer if isinstance(singer, str) else ""
+        pub = getattr(a, "time_public", None) or ""
+        parts = [f"{i+1}. {name}"]
+        if singer_str:
+            parts.append(singer_str)
+        parts.append(f"MID:{mid}")
+        if pub:
+            parts.append(f"发行:{pub}")
+        lines.append(" | ".join(parts))
+    return "\n".join(lines)
+
+
+def fmt_mv_list(mvs: list[Any]) -> str:
+    """MV搜索结果格式化."""
+    if not mvs:
+        return "无结果"
+    lines = []
+    for i, m in enumerate(mvs):
+        name = _strip_html(getattr(m, "name", None) or getattr(m, "title", None)) or "未知"
+        vid = getattr(m, "vid", None) or ""
+        dur = _duration(getattr(m, "duration", None))
+        parts = [f"{i+1}. {name}"]
+        if dur:
+            parts.append(dur)
+        parts.append(f"VID:{vid}")
+        lines.append(" | ".join(parts))
+    return "\n".join(lines)
+
+
+def fmt_songlists(songlists: list[Any]) -> str:
+    """歌单搜索结果格式化."""
+    if not songlists:
+        return "无结果"
+    lines = []
+    for i, s in enumerate(songlists):
+        title = _strip_html(getattr(s, "title", None) or getattr(s, "name", None)) or "未知"
+        sid = getattr(s, "id", None) or ""
+        num = getattr(s, "songnum", None) or ""
+        listen = getattr(s, "listennum", None) or ""
+        nick = getattr(s, "nickname", None) or ""
+        parts = [f"{i+1}. {title}"]
+        if nick:
+            parts.append(nick)
+        if num:
+            parts.append(f"{num}首")
+        parts.append(f"ID:{sid}")
+        if listen:
+            parts.append(f"播放:{listen}")
+        lines.append(" | ".join(parts))
+    return "\n".join(lines)
+
+
 def fmt_song_detail(track: Any) -> str:
     if not track:
         return "未找到歌曲"
