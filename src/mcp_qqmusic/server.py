@@ -47,7 +47,8 @@ QUALITY_MAP = {
 
 @dataclass
 class AppState:
-    client: Client
+    client: Client              # 无凭证，公开接口
+    auth_client: Client | None  # 有凭证，需登录接口
 
 
 @asynccontextmanager
@@ -60,11 +61,14 @@ async def lifespan(server: FastMCP):
         with open(cred_path, encoding="utf-8") as f:
             credential = Credential.model_validate(json.load(f))
 
-    client = Client(credential=credential)
+    client = Client()  # 无凭证，公开请求不携带登录信息
+    auth_client = Client(credential=credential) if credential else None
     try:
-        yield AppState(client=client)
+        yield AppState(client=client, auth_client=auth_client)
     finally:
         await client.close()
+        if auth_client:
+            await auth_client.close()
 
 
 # ── MCP Server ────────────────────────────────────────
@@ -77,10 +81,19 @@ mcp = FastMCP(
 
 
 def _get_client() -> Client:
-    """从 lifespan context 获取 Client."""
+    """从 lifespan context 获取无凭证 Client."""
     ctx = mcp.get_context()
     state: AppState = ctx.request_context.lifespan_context
     return state.client
+
+
+def _get_auth_client() -> Client:
+    """从 lifespan context 获取有凭证 Client，未登录时抛异常."""
+    ctx = mcp.get_context()
+    state: AppState = ctx.request_context.lifespan_context
+    if not state.auth_client:
+        raise RuntimeError("未登录，请先运行 login.py 获取凭证")
+    return state.auth_client
 
 
 def _err(e: Exception) -> str:
@@ -142,8 +155,9 @@ async def detail(
             return fmt_song_detail(getattr(data, "track", data))
 
         if type == "album":
-            detail_data = await client.album.get_detail(id)
-            songs_data = await client.album.get_song(id, num=size, page=page)
+            ac = _get_auth_client()
+            detail_data = await ac.album.get_detail(id)
+            songs_data = await ac.album.get_song(id, num=size, page=page)
             songs = getattr(songs_data, "song_list", None) or []
             return fmt_album_detail(detail_data, songs)
 
@@ -159,7 +173,8 @@ async def detail(
             return fmt_singer_info(info, desc)
 
         if type == "songlist":
-            data = await client.songlist.get_detail(songlist_id=int(id), num=size, page=page)
+            ac = _get_auth_client()
+            data = await ac.songlist.get_detail(songlist_id=int(id), num=size, page=page)
             return fmt_songlist_detail(data)
 
         if type == "top":
@@ -197,14 +212,14 @@ async def url(
     mid: str,
     quality: str = "high",
 ) -> str:
-    """获取歌曲播放链接。
+    """获取歌曲播放链接⚠️。
 
     Args:
         mid: 歌曲MID
         quality: 音质 - standard(128k), high(320k), lossless(FLAC)
     """
     try:
-        client = _get_client()
+        client = _get_auth_client()
         ftype = QUALITY_MAP.get(quality, SongFileType.MP3_320)
         data = await client.song.get_song_urls(
             file_info=[SongFileInfo(mid=mid)],
