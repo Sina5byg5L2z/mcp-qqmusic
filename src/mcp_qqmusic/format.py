@@ -30,8 +30,9 @@ def _song_line(song: Any, idx: int | None = None) -> str:
     singer = _singer_names(getattr(song, "singer", None))
     album = _strip_html(getattr(getattr(song, "album", None), "name", None)) or "未知"
     dur = _duration(getattr(song, "interval", None))
+    mid = getattr(song, "mid", None) or ""
     prefix = f"{idx}. " if idx else ""
-    return f"{prefix}{name} | {singer} | {album}{f' | {dur}' if dur else ''}"
+    return f"{prefix}{name} | {singer} | {album}{f' | {dur}' if dur else ''} | MID:{mid}"
 
 
 def fmt_songs(songs: list[Any]) -> str:
