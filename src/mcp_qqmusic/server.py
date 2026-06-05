@@ -11,11 +11,13 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from qqmusic_api import Client, Credential
 from qqmusic_api.modules.search import SearchType
+from qqmusic_api.modules.singer import TabType
 from qqmusic_api.modules.song import SongFileInfo, SongFileType
 
 from .format import (
     fmt_album_detail,
     fmt_lyric,
+    fmt_mv_detail,
     fmt_recommend,
     fmt_singer_info,
     fmt_song_detail,
@@ -170,7 +172,28 @@ async def detail(
                 desc = await client.singer.get_desc([id])
             except Exception:
                 desc = None
-            return fmt_singer_info(info, desc)
+            # 获取歌手百科简介
+            wiki_intro = ""
+            try:
+                wiki = await client.singer.get_tab_detail(id, TabType.WIKI, num=10)
+                intro_tabs = getattr(wiki, "introduction_tab", None) or []
+                if intro_tabs:
+                    singer_info_list = intro_tabs[0].get("SingerInfoList") or []
+                    if singer_info_list:
+                        wiki_intro = singer_info_list[0].get("Content", "")
+            except Exception:
+                pass
+            try:
+                songs_data = await client.singer.get_songs_list(id, num=size)
+                songs = getattr(songs_data, "song_list", None) or songs_data if isinstance(songs_data, list) else None
+            except Exception:
+                songs = None
+            try:
+                albums_data = await client.singer.get_album_list(id, num=size)
+                albums = getattr(albums_data, "album_list", None) or albums_data if isinstance(albums_data, list) else None
+            except Exception:
+                albums = None
+            return fmt_singer_info(info, desc, songs=songs, albums=albums, wiki=wiki_intro)
 
         if type == "songlist":
             ac = _get_auth_client()
@@ -248,6 +271,24 @@ async def recommend(
         else:
             return f"未知推荐类型: {type}"
         return fmt_recommend(data, type)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+async def mv(
+    vid: str,
+) -> str:
+    """获取MV详情和播放链接。
+
+    Args:
+        vid: MV的VID（搜索结果中的MV:xxx）
+    """
+    try:
+        client = _get_client()
+        detail = await client.mv.get_detail([vid])
+        urls = await client.mv.get_mv_urls([vid])
+        return fmt_mv_detail(detail, urls)
     except Exception as e:
         return _err(e)
 

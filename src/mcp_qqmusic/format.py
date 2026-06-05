@@ -18,6 +18,22 @@ def _singer_names(singers: list[Any] | None) -> str:
     return "/".join(getattr(s, "name", str(s)) or "未知" for s in singers)
 
 
+def _singer_detail(singers: list[Any] | None) -> str:
+    """歌手名 + ID/MID，用于搜索结果和详情."""
+    if not singers:
+        return "未知"
+    parts = []
+    for s in singers:
+        name = getattr(s, "name", str(s)) or "未知"
+        sid = getattr(s, "id", None)
+        mid = getattr(s, "mid", None)
+        tag = name
+        if sid or mid:
+            tag += f" (ID:{sid} MID:{mid})"
+        parts.append(tag)
+    return "/".join(parts)
+
+
 def _duration(seconds: int | float | None) -> str:
     if not seconds:
         return ""
@@ -25,14 +41,35 @@ def _duration(seconds: int | float | None) -> str:
     return f"{m}:{s:02d}"
 
 
+def _vip_tag(song: Any) -> str:
+    """检测 VIP 标记."""
+    pay = getattr(song, "pay", None)
+    if pay and getattr(pay, "pay_play", 0):
+        return "[VIP]"
+    return ""
+
+
 def _song_line(song: Any, idx: int | None = None) -> str:
+    """搜索/列表中的单行歌曲信息."""
     name = _strip_html(getattr(song, "name", None) or getattr(song, "title", None)) or "未知"
     singer = _singer_names(getattr(song, "singer", None))
     album = _strip_html(getattr(getattr(song, "album", None), "name", None)) or "未知"
     dur = _duration(getattr(song, "interval", None))
+    sid = getattr(song, "id", None) or ""
     mid = getattr(song, "mid", None) or ""
+    vip = _vip_tag(song)
+    mv = getattr(song, "mv", None)
+    mv_vid = getattr(mv, "vid", None) if mv else ""
     prefix = f"{idx}. " if idx else ""
-    return f"{prefix}{name} | {singer} | {album}{f' | {dur}' if dur else ''} | MID:{mid}"
+    parts = [f"{prefix}{vip}{name}" if vip else f"{prefix}{name}"]
+    parts.append(singer)
+    parts.append(album)
+    if dur:
+        parts.append(dur)
+    parts.append(f"ID:{sid} MID:{mid}")
+    if mv_vid:
+        parts.append(f"MV:{mv_vid}")
+    return " | ".join(parts)
 
 
 def fmt_songs(songs: list[Any]) -> str:
@@ -44,19 +81,38 @@ def fmt_songs(songs: list[Any]) -> str:
 def fmt_song_detail(track: Any) -> str:
     if not track:
         return "未找到歌曲"
-    lines = [
-        f"歌曲: {getattr(track, 'name', '未知')}",
-        f"MID: {getattr(track, 'mid', '未知')}",
-        f"ID: {getattr(track, 'id', '未知')}",
-        f"歌手: {_singer_names(getattr(track, 'singer', None))}",
-        f"专辑: {getattr(getattr(track, 'album', None), 'name', None) or '未知'}",
-    ]
+    name = getattr(track, "name", None) or getattr(track, "title", "未知")
+    sid = getattr(track, "id", "未知")
+    mid = getattr(track, "mid", "未知")
+    singer = getattr(track, "singer", None)
+    album = getattr(track, "album", None)
+    album_name = getattr(album, "name", None) or "未知"
+    album_mid = getattr(album, "mid", None) or ""
+    album_id = getattr(album, "id", None) or ""
     interval = getattr(track, "interval", None)
+    pub = getattr(album, "time_public", None) or getattr(track, "time_public", None)
+    vip = _vip_tag(track)
+    lang = getattr(track, "language", None)
+    bpm = getattr(track, "bpm", None)
+    lines = [
+        f"歌曲: {name}{vip}",
+        f"ID: {sid}",
+        f"MID: {mid}",
+        f"歌手: {_singer_detail(singer)}",
+        f"专辑: {album_name} (ID:{album_id} MID:{album_mid})",
+    ]
     if interval:
         lines.append(f"时长: {_duration(interval)}")
-    pub = getattr(getattr(track, "album", None), "time_public", None)
     if pub:
         lines.append(f"发行: {pub}")
+    if lang is not None:
+        lines.append(f"语言: {lang}")
+    if bpm:
+        lines.append(f"BPM: {bpm}")
+    mv = getattr(track, "mv", None)
+    mv_vid = getattr(mv, "vid", None) if mv else ""
+    if mv_vid:
+        lines.append(f"MV: {mv_vid}")
     return "\n".join(lines)
 
 
@@ -64,10 +120,14 @@ def fmt_album_detail(detail: Any, songs: list[Any] | None = None) -> str:
     if not detail:
         return "未找到专辑"
     album = getattr(detail, "album", detail)
+    album_name = getattr(album, "name", "未知")
+    album_mid = getattr(album, "mid", "未知")
+    album_id = getattr(album, "id", "未知")
     lines = [
-        f"专辑: {getattr(album, 'name', '未知')}",
-        f"MID: {getattr(album, 'mid', '未知')}",
-        f"歌手: {_singer_names(getattr(detail, 'singer', None) or getattr(album, 'singer', None))}",
+        f"专辑: {album_name}",
+        f"ID: {album_id}",
+        f"MID: {album_mid}",
+        f"歌手: {_singer_detail(getattr(detail, 'singer', None) or getattr(album, 'singer', None))}",
     ]
     pub = getattr(album, "time_public", None) or getattr(detail, "pub_time", None)
     if pub:
@@ -75,21 +135,31 @@ def fmt_album_detail(detail: Any, songs: list[Any] | None = None) -> str:
     total = getattr(album, "total", None) or getattr(detail, "total", None)
     if total:
         lines.append(f"曲目数: {total}")
+    lang = getattr(album, "language", None)
+    if lang:
+        lines.append(f"语言: {lang}")
+    genre = getattr(album, "genre", None)
+    if genre:
+        lines.append(f"流派: {genre}")
     desc = getattr(detail, "desc", None) or getattr(album, "desc", None)
     if desc:
-        lines.append(f"简介: {desc[:200]}")
+        lines.append(f"简介: {desc[:300]}")
     if songs:
         lines += ["", "--- 歌曲列表 ---", fmt_songs(songs)]
     return "\n".join(lines)
 
 
-def fmt_singer_info(info: Any, desc: Any = None) -> str:
+def fmt_singer_info(info: Any, desc: Any = None, songs: list[Any] | None = None,
+                    albums: list[Any] | None = None, wiki: str = "") -> str:
     if not info:
         return "未找到歌手"
     singer = getattr(info, "singer", info)
+    sid = getattr(singer, "id", "未知")
+    mid = getattr(singer, "mid", "未知")
     lines = [
         f"歌手: {getattr(singer, 'name', '未知')}",
-        f"MID: {getattr(singer, 'mid', '未知')}",
+        f"ID: {sid}",
+        f"MID: {mid}",
     ]
     # base_info may be HomepageBaseInfo with name/avatar
     base = getattr(info, "base_info", None)
@@ -104,18 +174,32 @@ def fmt_singer_info(info: Any, desc: Any = None) -> str:
         if sl and len(sl) > 0:
             ex = getattr(sl[0], "ex_info", None)
         if not ex:
-            # Try alternate: list of singer desc items
             items = getattr(desc, "singer_desc", None) or (desc if isinstance(desc, list) else None)
             if items and len(items) > 0:
                 ex = items[0] if isinstance(items[0], object) else None
     if ex:
-        for field, label in [("area", "地区"), ("genre", "流派"), ("birthday", "生日")]:
+        extras = []
+        for field, label in [("area", "地区"), ("genre", "流派"), ("birthday", "生日"),
+                              ("instrument", "擅长乐器"), ("company", "唱片公司"),
+                              ("identity", "身份"), ("tag", "标签"), ("foreign_name", "外文名"),
+                              ("enter", "出道时间")]:
             val = getattr(ex, field, None)
             if val:
-                lines.append(f"{label}: {val}")
-        d = getattr(ex, "desc", None) or getattr(ex, "简介", None)
-        if d:
-            lines.append(f"简介: {d[:300]}")
+                extras.append(f"{label}: {val}")
+        if extras:
+            lines += extras
+    if wiki:
+        lines += ["", "--- 简介 ---", wiki[:3000]]
+    if songs:
+        lines += ["", "--- 热门歌曲 ---", fmt_songs(songs)]
+    if albums:
+        lines += ["", "--- 专辑 ---"]
+        for i, a in enumerate(albums):
+            aname = getattr(a, "name", None) or getattr(a, "title", "未知")
+            aid = getattr(a, "id", None) or ""
+            amid = getattr(a, "mid", None) or ""
+            apub = getattr(a, "time_public", None) or ""
+            lines.append(f"{i+1}. {aname} | ID:{aid} MID:{amid}{f' | 发行:{apub}' if apub else ''}")
     return "\n".join(lines)
 
 
@@ -141,9 +225,20 @@ def fmt_songlist_detail(detail: Any) -> str:
         cname = getattr(creator, "name", None) or getattr(creator, "nickname", None)
         if cname:
             lines.append(f"创建者: {cname}")
+    tag = getattr(info, "tag", None)
+    if tag:
+        tags = getattr(tag, "tag_list", None) or (tag if isinstance(tag, list) else None)
+        if tags:
+            tag_names = []
+            for t in tags:
+                tn = getattr(t, "name", None) or getattr(t, "tag_name", None)
+                if tn:
+                    tag_names.append(tn)
+            if tag_names:
+                lines.append(f"标签: {'/'.join(tag_names)}")
     desc = getattr(info, "desc", None)
     if desc:
-        lines.append(f"简介: {desc[:200]}")
+        lines.append(f"简介: {desc[:300]}")
     songs = getattr(detail, "songs", None) or getattr(detail, "songlist", None)
     if songs:
         lines += ["", "--- 歌曲列表 ---", fmt_songs(songs)]
@@ -168,7 +263,7 @@ def fmt_top_detail(detail: Any) -> str:
         lines.append(f"歌曲数: {total}")
     intro = getattr(info, "intro", None)
     if intro:
-        lines.append(f"简介: {intro[:200]}")
+        lines.append(f"简介: {intro[:300]}")
     songs = getattr(detail, "songs", None) or getattr(info, "songs", None) or getattr(detail, "song", None)
     if songs:
         lines += ["", "--- 歌曲列表 ---", fmt_songs(songs)]
@@ -200,7 +295,6 @@ def fmt_lyric(data: Any) -> str:
     def _strip_ts(text: str) -> str:
         lines = []
         for line in text.split("\n"):
-            # [mm:ss.xx]content → content
             parts = line.split("]", 1)
             lines.append(parts[-1].strip() if len(parts) > 1 else line.strip())
         return "\n".join(l for l in lines if l)
@@ -256,6 +350,59 @@ def fmt_recommend(data: Any, rtype: str) -> str:
                 creator = (getattr(getattr(s, "creator", None), "name", None)
                           or getattr(s, "creator_nick", None) or getattr(s, "nickname", ""))
                 num = getattr(s, "songnum", None) or getattr(s, "total", "")
-                lines.append(f"{i+1}. {title} | {creator}{f' | {num}首' if num else ''}")
+                tid = getattr(s, "id", None) or getattr(s, "tid", "") or ""
+                listen = getattr(s, "listennum", None) or ""
+                lines.append(f"{i+1}. {title} | {creator}{f' | {num}首' if num else ''} | ID:{tid}{f' | 播放:{listen}' if listen else ''}")
             return "\n".join(lines)
     return str(data)[:500]
+
+
+def fmt_mv_detail(detail: Any, urls: Any = None) -> str:
+    if not detail:
+        return "未找到MV"
+    data = getattr(detail, "data", detail)
+    # data is dict[vid, MvDetail] or MvDetail directly
+    if isinstance(data, dict):
+        mv = next(iter(data.values()), None) if data else None
+    else:
+        mv = data
+    if not mv:
+        return "未找到MV"
+    name = getattr(mv, "name", None) or getattr(mv, "title", "未知")
+    vid = getattr(mv, "vid", "未知")
+    singers = getattr(mv, "singers", None)
+    singer_str = "/".join(s.get("name", "未知") for s in singers) if singers else "未知"
+    dur = _duration(getattr(mv, "duration", None))
+    playcnt = getattr(mv, "playcnt", None)
+    pubdate = getattr(mv, "pubdate", None)
+    desc = getattr(mv, "desc", None)
+
+    lines = [
+        f"MV: {name}",
+        f"VID: {vid}",
+        f"歌手: {singer_str}",
+    ]
+    if dur:
+        lines.append(f"时长: {dur}")
+    if playcnt:
+        lines.append(f"播放量: {playcnt}")
+    if pubdate:
+        lines.append(f"发布: {pubdate}")
+    if desc:
+        lines.append(f"简介: {desc[:300]}")
+
+    # URLs
+    if urls:
+        url_data = getattr(urls, "data", urls)
+        if isinstance(url_data, dict):
+            url_set = next(iter(url_data.values()), None) if url_data else None
+        else:
+            url_set = url_data
+        if url_set:
+            mp4_list = getattr(url_set, "mp4", None) or []
+            for item in mp4_list:
+                url_list = getattr(item, "url", None) or []
+                if url_list:
+                    lines.append(f"播放链接: {url_list[0]}")
+                    break
+    return "\n".join(lines)
