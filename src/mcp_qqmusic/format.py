@@ -176,7 +176,7 @@ def fmt_singer_info(info: Any, desc: Any = None, songs: list[Any] | None = None,
         if not ex:
             items = getattr(desc, "singer_desc", None) or (desc if isinstance(desc, list) else None)
             if items and len(items) > 0:
-                ex = items[0] if isinstance(items[0], object) else None
+                ex = items[0]
     if ex:
         extras = []
         for field, label in [("area", "地区"), ("genre", "流派"), ("birthday", "生日"),

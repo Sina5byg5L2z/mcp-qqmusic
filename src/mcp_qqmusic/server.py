@@ -24,7 +24,6 @@ from .format import (
     fmt_song_urls,
     fmt_songlist_detail,
     fmt_songs,
-    fmt_top_category,
     fmt_top_detail,
 )
 
