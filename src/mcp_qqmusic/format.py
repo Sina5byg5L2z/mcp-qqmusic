@@ -431,6 +431,126 @@ def fmt_recommend(data: Any, rtype: str) -> str:
     return str(data)[:500]
 
 
+def fmt_hotkeys(data: Any) -> str:
+    """热搜榜格式化."""
+    if not data:
+        return "无数据"
+    items = []
+    if isinstance(data, dict):
+        items = data.get("vec_hotkey", [])
+    if not items:
+        return "无热搜数据"
+    lines = []
+    for i, item in enumerate(items):
+        if isinstance(item, dict):
+            word = item.get("title", "") or item.get("query", "")
+            score = item.get("score", "")
+        else:
+            word = getattr(item, "title", None) or getattr(item, "query", "")
+            score = getattr(item, "score", None) or ""
+        if not word:
+            continue
+        part = f"{i+1}. {word}"
+        if score:
+            part += f" (热度:{score})"
+        lines.append(part)
+    return "\n".join(lines) if lines else "无热搜数据"
+
+
+def fmt_complete(data: Any) -> str:
+    """搜索联想格式化."""
+    if not data:
+        return "无联想结果"
+    if isinstance(data, dict):
+        items = data.get("items", []) or data.get("vec_direct_items", [])
+    else:
+        items = getattr(data, "items", None) or []
+    if not items:
+        return "无联想结果"
+    lines = []
+    for i, item in enumerate(items):
+        if isinstance(item, dict):
+            word = item.get("hint", "") or item.get("title", "")
+        else:
+            word = getattr(item, "hint", None) or getattr(item, "title", "")
+        if word:
+            # 去除 HTML 高亮标签
+            word = _strip_html(word)
+            lines.append(f"{i+1}. {word}")
+    return "\n".join(lines) if lines else "无联想结果"
+
+
+def fmt_similar_singers(singers: list[Any]) -> str:
+    """相似歌手格式化."""
+    if not singers:
+        return "无相似歌手"
+    lines = []
+    for i, s in enumerate(singers):
+        name = getattr(s, "name", None) or getattr(s, "singer_name", None) or "未知"
+        mid = getattr(s, "mid", None) or getattr(s, "singer_mid", None) or ""
+        lines.append(f"{i+1}. {name} | MID:{mid}")
+    return "\n".join(lines)
+
+
+def fmt_producer(data: Any) -> str:
+    """歌曲制作信息格式化."""
+    if not data:
+        return "无制作信息"
+    groups = getattr(data, "data", None) or []
+    if groups is None:
+        groups = []
+    if not groups:
+        return "无制作信息"
+    lines = []
+    for group in groups:
+        title = getattr(group, "title", "") or "未知角色"
+        producers = getattr(group, "producers", None) or []
+        names = []
+        for p in producers:
+            name = getattr(p, "name", "") or ""
+            singer_mid = getattr(p, "singer_mid", "") or ""
+            if name:
+                tag = name
+                if singer_mid:
+                    tag += f" (MID:{singer_mid})"
+                names.append(tag)
+        if names:
+            lines.append(f"{title}: {' / '.join(names)}")
+    return "\n".join(lines) if lines else "无制作信息"
+
+
+def fmt_comments(comments: list[Any]) -> str:
+    """热门评论格式化."""
+    if not comments:
+        return "无评论"
+    lines = []
+    for i, c in enumerate(comments):
+        nick = getattr(c, "nick", "") or "匿名"
+        content = getattr(c, "content", "") or ""
+        praise = getattr(c, "praise_num", 0)
+        reply = getattr(c, "reply_cnt", 0)
+        pub_time = getattr(c, "pub_time", 0)
+        time_str = ""
+        if pub_time:
+            try:
+                time_str = datetime.fromtimestamp(pub_time).strftime("%Y-%m-%d")
+            except (ValueError, OSError, TypeError):
+                time_str = str(pub_time)
+        part = f"{i+1}. [{nick}]"
+        if time_str:
+            part += f" ({time_str})"
+        part += f"\n   {content}"
+        stats = []
+        if praise:
+            stats.append(f"👍{praise}")
+        if reply:
+            stats.append(f"💬{reply}")
+        if stats:
+            part += f"\n   {' '.join(stats)}"
+        lines.append(part)
+    return "\n".join(lines)
+
+
 def fmt_mv_detail(detail: Any, urls: Any = None) -> str:
     if not detail:
         return "未找到MV"

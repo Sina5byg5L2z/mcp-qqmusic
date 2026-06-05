@@ -17,12 +17,17 @@ from qqmusic_api.modules.song import SongFileInfo, SongFileType
 from .format import (
     fmt_album_detail,
     fmt_albums,
+    fmt_comments,
+    fmt_complete,
+    fmt_hotkeys,
     fmt_lyric,
     fmt_mv_detail,
     fmt_mv_list,
+    fmt_producer,
     fmt_recommend,
     fmt_singer_info,
     fmt_singers,
+    fmt_similar_singers,
     fmt_song_detail,
     fmt_song_urls,
     fmt_songlist_detail,
@@ -30,6 +35,8 @@ from .format import (
     fmt_songs,
     fmt_top_detail,
 )
+
+# fmt_complete, fmt_hotkeys, fmt_similar_singers 仍被 search/similar tool 使用
 
 # ── 配置 ──────────────────────────────────────────────
 
@@ -118,12 +125,21 @@ async def search(
 
     Args:
         keyword: 搜索关键词
-        type: 搜索类型 - song(歌曲), singer(歌手), album(专辑), songlist(歌单), mv(MV)
+        type: 搜索类型 - song(歌曲), singer(歌手), album(专辑), songlist(歌单), mv(MV), hotkey(热搜榜), complete(搜索联想)
         page: 页码
         size: 每页数量(1-50)
     """
     try:
         client = _get_client()
+
+        if type == "hotkey":
+            data = await client.search.get_hotkey()
+            return fmt_hotkeys(data)
+
+        if type == "complete":
+            data = await client.search.complete(keyword)
+            return fmt_complete(data)
+
         stype = SEARCH_TYPE_MAP.get(type, SearchType.SONG)
         req = client.search.search_by_type(keyword, search_type=stype, num=min(size, 50), page=page, highlight=False)
         data = await req
@@ -275,7 +291,7 @@ async def recommend(
     """获取QQ音乐推荐内容。
 
     Args:
-        type: 推荐类型 - song(推荐新歌), songlist(推荐歌单)
+        type: 推荐类型 - song(推荐新歌), songlist(推荐歌单), guess(猜你喜欢)
     """
     try:
         client = _get_client()
@@ -283,6 +299,10 @@ async def recommend(
             data = await client.recommend.get_recommend_newsong()
         elif type == "songlist":
             data = await client.recommend.get_recommend_songlist()
+        elif type == "guess":
+            data = await client.recommend.get_guess_recommend()
+            songs = getattr(data, "songs", None) or []
+            return fmt_songs(songs) if songs else "无推荐数据"
         else:
             return f"未知推荐类型: {type}"
         return fmt_recommend(data, type)
@@ -304,6 +324,91 @@ async def mv(
         detail = await client.mv.get_detail([vid])
         urls = await client.mv.get_mv_urls([vid])
         return fmt_mv_detail(detail, urls)
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+async def similar(
+    id: str,
+    type: str = "song",
+) -> str:
+    """获取相似歌曲或歌手推荐。
+
+    Args:
+        id: 歌曲ID(数字) 或 歌手MID(字母开头)
+        type: 类型 - song(相似歌曲), singer(相似歌手)
+    """
+    try:
+        client = _get_client()
+        if type == "singer":
+            data = await client.singer.get_similar(id)
+            singers = getattr(data, "singerlist", None) or []
+            return fmt_similar_singers(singers)
+        else:
+            try:
+                data = await client.song.get_similar_song(int(id) if id.isdigit() else id)
+                groups = getattr(data, "song", None) or []
+                lines = []
+                for group in groups:
+                    title = getattr(group, "title_content", None) or getattr(group, "title_template", "")
+                    songs = getattr(group, "song", None) or []
+                    if title:
+                        lines.append(f"--- {title} ---")
+                    lines.append(fmt_songs(songs))
+                return "\n".join(lines) if lines else "无相似歌曲"
+            except Exception:
+                return "该歌曲暂无相似推荐"
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+async def producer(
+    id: str,
+) -> str:
+    """获取歌曲制作信息（词曲编录等创作团队）。
+
+    Args:
+        id: 歌曲ID或MID
+    """
+    try:
+        client = _get_client()
+        try:
+            data = await client.song.get_producer(int(id) if id.isdigit() else id)
+            return fmt_producer(data)
+        except Exception:
+            # API 可能返回空数据导致验证失败，尝试从 detail 获取
+            detail = await client.song.get_detail(int(id) if id.isdigit() else id)
+            track = getattr(detail, "track", None)
+            if track:
+                label = getattr(track, "label", None)
+                if label:
+                    return f"唱片公司: {label}"
+            return "暂无制作信息"
+    except Exception as e:
+        return _err(e)
+
+
+@mcp.tool()
+async def hot_comments(
+    id: str,
+    size: int = 15,
+) -> str:
+    """获取歌曲热门评论。
+
+    Args:
+        id: 歌曲ID
+        size: 返回数量(1-50)
+    """
+    try:
+        client = _get_client()
+        data = await client.comment.get_hot_comments(int(id), page_size=min(size, 50))
+        comments = getattr(data, "comments", None) or []
+        total = getattr(data, "total", 0)
+        meta = f"热门评论 (共{total}条)" if total else "热门评论"
+        result = fmt_comments(comments)
+        return f"{meta}\n{result}"
     except Exception as e:
         return _err(e)
 
