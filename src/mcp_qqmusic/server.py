@@ -57,30 +57,22 @@ QUALITY_MAP = {
 
 # ── 生命周期 ──────────────────────────────────────────
 
+CRED_PATH = os.path.join(os.getcwd(), "credential.json")
+
+
 @dataclass
 class AppState:
-    client: Client              # 无凭证，公开接口
-    auth_client: Client | None  # 有凭证，需登录接口
+    client: Client  # 无凭证，公开接口
 
 
 @asynccontextmanager
 async def lifespan(server: FastMCP):
     """管理 Client 生命周期：启动时创建，关闭时清理."""
-    cred_path = os.path.join(os.getcwd(), "credential.json")
-
-    credential = None
-    if os.path.exists(cred_path):
-        with open(cred_path, encoding="utf-8") as f:
-            credential = Credential.model_validate(json.load(f))
-
     client = Client()  # 无凭证，公开请求不携带登录信息
-    auth_client = Client(credential=credential) if credential else None
     try:
-        yield AppState(client=client, auth_client=auth_client)
+        yield AppState(client=client)
     finally:
         await client.close()
-        if auth_client:
-            await auth_client.close()
 
 
 # ── MCP Server ────────────────────────────────────────
@@ -99,13 +91,23 @@ def _get_client() -> Client:
     return state.client
 
 
+def _load_credential() -> Credential | None:
+    """动态读取 credential.json，每次调用都重新加载."""
+    if not os.path.exists(CRED_PATH):
+        return None
+    try:
+        with open(CRED_PATH, encoding="utf-8") as f:
+            return Credential.model_validate(json.load(f))
+    except Exception:
+        return None
+
+
 def _get_auth_client() -> Client:
-    """从 lifespan context 获取有凭证 Client，未登录时抛异常."""
-    ctx = mcp.get_context()
-    state: AppState = ctx.request_context.lifespan_context
-    if not state.auth_client:
-        raise RuntimeError("未登录，请先运行 login.py 获取凭证")
-    return state.auth_client
+    """获取带凭证的 Client，动态读取 credential.json."""
+    credential = _load_credential()
+    if not credential:
+        raise RuntimeError("未登录，请先运行 login.py 或 login.bat 获取凭证")
+    return Client(credential=credential)
 
 
 def _err(e: Exception) -> str:
@@ -186,10 +188,13 @@ async def detail(
 
         if type == "album":
             ac = _get_auth_client()
-            detail_data = await ac.album.get_detail(id)
-            songs_data = await ac.album.get_song(id, num=size, page=page)
-            songs = getattr(songs_data, "song_list", None) or []
-            return fmt_album_detail(detail_data, songs)
+            try:
+                detail_data = await ac.album.get_detail(id)
+                songs_data = await ac.album.get_song(id, num=size, page=page)
+                songs = getattr(songs_data, "song_list", None) or []
+                return fmt_album_detail(detail_data, songs)
+            finally:
+                await ac.close()
 
         if type == "singer":
             try:
@@ -228,8 +233,11 @@ async def detail(
 
         if type == "songlist":
             ac = _get_auth_client()
-            data = await ac.songlist.get_detail(songlist_id=int(id), num=size, page=page)
-            return fmt_songlist_detail(data)
+            try:
+                data = await ac.songlist.get_detail(songlist_id=int(id), num=size, page=page)
+                return fmt_songlist_detail(data)
+            finally:
+                await ac.close()
 
         if type == "top":
             data = await client.top.get_detail(top_id=int(id), num=size, page=page)
@@ -274,12 +282,15 @@ async def url(
     """
     try:
         client = _get_auth_client()
-        ftype = QUALITY_MAP.get(quality, SongFileType.MP3_320)
-        data = await client.song.get_song_urls(
-            file_info=[SongFileInfo(mid=mid)],
-            file_type=ftype,
-        )
-        return fmt_song_urls(data)
+        try:
+            ftype = QUALITY_MAP.get(quality, SongFileType.MP3_320)
+            data = await client.song.get_song_urls(
+                file_info=[SongFileInfo(mid=mid)],
+                file_type=ftype,
+            )
+            return fmt_song_urls(data)
+        finally:
+            await client.close()
     except Exception as e:
         return _err(e)
 
@@ -392,18 +403,18 @@ async def producer(
 
 @mcp.tool()
 async def hot_comments(
-    id: str,
+    id: int,
     size: int = 15,
 ) -> str:
     """获取歌曲热门评论。
 
     Args:
-        id: 歌曲ID
+        id: 歌曲ID（数字）
         size: 返回数量(1-50)
     """
     try:
         client = _get_client()
-        data = await client.comment.get_hot_comments(int(id), page_size=min(size, 50))
+        data = await client.comment.get_hot_comments(id, page_size=min(size, 50))
         comments = getattr(data, "comments", None) or []
         total = getattr(data, "total", 0)
         meta = f"热门评论 (共{total}条)" if total else "热门评论"
