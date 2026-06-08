@@ -4,22 +4,26 @@
 
 ## 功能
 
-5 个工具，覆盖 QQ 音乐核心能力：
+9 个工具，覆盖 QQ 音乐核心能力：
 
 | 工具 | 功能 | 参数 |
 |------|------|------|
-| `search` | 搜索歌曲/歌手/专辑/歌单/MV | `keyword`, `type`, `page`, `size` |
-| `detail` | 查看资源详情 | `type`(song/album/singer/songlist/top), `id` |
+| `search` | 搜索歌曲/歌手/专辑/歌单/MV + 热搜榜 + 搜索联想 | `keyword`, `type`(song/singer/album/songlist/mv/hotkey/complete), `page`, `size` |
+| `detail` | 查看歌曲/专辑/歌手/歌单/榜单详情 | `type`(song/album/singer/songlist/top), `id`, `page`, `size` |
 | `lyric` | 获取歌词（自动解密 QRC） | `id`, `trans`, `roma` |
 | `url` | 获取播放链接 | `mid`, `quality`(standard/high/lossless) |
-| `recommend` | 获取推荐新歌/歌单 | `type`(song/songlist) |
+| `recommend` | 推荐新歌/歌单/猜你喜欢 | `type`(song/songlist/guess) |
+| `similar` | 相似歌曲/相似歌手推荐 | `id`, `type`(song/singer) |
+| `producer` | 查看歌曲制作信息（词曲编录等） | `id` |
+| `hot_comments` | 获取歌曲热门评论 | `id`, `size` |
+| `top` | 排行榜分类/榜单详情 | `type`(category/detail), `id`, `page`, `size` |
 
 ## 安装
 
 前置要求：Python >= 3.10，推荐使用 [uv](https://docs.astral.sh/uv/) 包管理器。
 
 ```bash
-git clone https://github.com/yourname/mcp-qqmusic.git
+git clone https://github.com/Sina5byg5L2z/mcp-qqmusic.git
 cd mcp-qqmusic
 uv sync
 ```
@@ -38,7 +42,7 @@ uv run python login.py
 2. **微信扫码** — 手机微信扫描二维码
 3. **QQ音乐APP扫码** — QQ 音乐 APP 扫描二维码
 
-登录成功后凭证自动保存到 `credential.json`，MCP Server 启动时自动加载。
+登录成功后凭证自动保存到 `credential.json`，MCP Server 每次调用需要登录的功能时动态加载，无需重启即可生效。
 
 > `credential.json` 包含登录密钥，请妥善保管，不要泄露或提交到公开仓库（已在 `.gitignore` 中排除）。
 
@@ -79,7 +83,7 @@ mcp-qqmusic/
 └── src/mcp_qqmusic/
     ├── __init__.py
     ├── __main__.py
-    ├── server.py             # MCP Server（5 个工具，直接调用 SDK）
+    ├── server.py             # MCP Server（9 个工具，直接调用 SDK）
     └── format.py             # 紧凑文本格式化（节省 LLM 上下文）
 ```
 
